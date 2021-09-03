@@ -4,7 +4,7 @@ package io.confluent.parallelconsumer.offsets;
  * Copyright (C) 2020-2021 Confluent, Inc.
  */
 
-import io.confluent.csid.utils.TrimListRepresentation;
+import com.google.common.truth.Truth;
 import io.confluent.parallelconsumer.FakeRuntimeError;
 import io.confluent.parallelconsumer.ParallelEoSStreamProcessorTestBase;
 import io.confluent.parallelconsumer.offsets.OffsetMapCodecManager.HighestOffsetAndIncompletes;
@@ -13,7 +13,6 @@ import io.confluent.parallelconsumer.state.WorkManager;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Isolated;
 import org.junit.jupiter.api.parallel.ResourceAccessMode;
@@ -103,7 +102,7 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
         try {
 
             // wait for all pre-produced messages to be processed and produced
-            Assertions.useRepresentation(new TrimListRepresentation());
+//            Assertions.useRepresentation(new TrimListRepresentation());
             waitAtMost(ofSeconds(120))
                     // dynamic reason support still waiting https://github.com/awaitility/awaitility/pull/193#issuecomment-873116199
                     .failFast("PC died - check logs", parallelConsumer::isClosedOrFailed)
@@ -167,6 +166,10 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                         .as("Partition SHOULD be blocked due to back pressure")
                         .isTrue(); // blocked
 
+                waitAtMost(ofSeconds(120)).untilAsserted(() -> Truth.assertThat(processedCount.get()).isEqualTo(numRecords + (numRecords / 2 - 1)));
+                parallelConsumer.requestCommitAsap();
+                waitForOneLoopCycle();
+
                 // assert blocked, but can still write payload
                 // assert the committed offset metadata contains a payload
                 waitAtMost(ofSeconds(60)).untilAsserted(() ->
@@ -178,7 +181,8 @@ class OffsetEncodingBackPressureTest extends ParallelEoSStreamProcessorTestBase 
                             String meta = partitionCommit.metadata();
                             HighestOffsetAndIncompletes incompletes = OffsetMapCodecManager
                                     .deserialiseIncompleteOffsetMapFromBase64(0L, meta);
-                            assertThat(incompletes.getIncompleteOffsets()).containsOnly(0L);
+                            Truth.assertWithMessage("The only incomplete record now is offset zero, which we are blocked on")
+                                    .that(incompletes.getIncompleteOffsets()).containsExactly(0L);
                             assertThat(incompletes.getHighestSeenOffset()).isEqualTo(processedCount.get());
                         }
                 );
