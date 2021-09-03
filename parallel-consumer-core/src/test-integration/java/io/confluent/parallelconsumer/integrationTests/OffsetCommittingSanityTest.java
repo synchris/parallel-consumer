@@ -127,7 +127,7 @@ class OffsetCommittingSanityTest extends BrokerIntegrationTest<String, String> {
         newConsumer.subscribe(UniSets.of(topicNameForTest));
         newConsumer.poll(ofSeconds(1));
         Set<TopicPartition> assignment = newConsumer.assignment();
-        Truth.assertThat(assignment).isNotEmpty();
+        Truth.assertWithMessage("Should be assigned some partitions").that(assignment).isNotEmpty();
 
         //
         Map<TopicPartition, OffsetAndMetadata> committed = newConsumer.committed(assignment);
